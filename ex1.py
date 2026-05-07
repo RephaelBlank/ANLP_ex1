@@ -54,41 +54,37 @@ def main():
     if args.max_predict_samples != -1:
         predict_dataset = predict_dataset.select(range(args.max_predict_samples))
 
-    # 1. Initialize Weights & Biases for tracking
-    wandb.init(project="paraphrase-detection-bert", name="run-1-lr2e5-batch16")
+    if args.do_train:
+        run_name = f"lr{args.lr}-bs{args.batch_size}-ep{args.num_train_epochs}"
+        wandb.init(project="paraphrase-detection-bert", name=run_name)
 
-    # 2. Re-initialize the model from scratch for this experiment!
-    model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-uncased")
+        model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-uncased")
 
-    # 3. Define Training Arguments (Hyperparameters to experiment with)
-    training_args = TrainingArguments(
-        output_dir="./bert_mrpc_results",
-        eval_strategy="epoch",    # Evaluate on validation set at the end of each epoch
-        save_strategy="epoch",          # Save checkpoints to evaluate on the test set later
-        learning_rate=2e-5,             # Hyperparameter to tune
-        per_device_train_batch_size=8, # Hyperparameter to tune
-        per_device_eval_batch_size=16,
-        num_train_epochs=3,             # Must be <= 5 according to instructions
-        logging_steps=1,                # Required: log training loss every step
-        report_to="wandb",              # Required: track training with Weights & Biases
-        weight_decay=0.01
-    )
+        training_args = TrainingArguments(
+            output_dir="./bert_mrpc_results",
+            eval_strategy="epoch",
+            save_strategy="no",
+            learning_rate=args.lr,
+            per_device_train_batch_size=args.batch_size,
+            per_device_eval_batch_size=args.batch_size * 2,
+            num_train_epochs=args.num_train_epochs,
+            logging_steps=1,
+            report_to="wandb",
+            weight_decay=0.01
+        )
 
-    # 4. Initialize the Trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        processing_class=tokenizer,
-        compute_metrics=compute_metrics,
-    )
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            processing_class=tokenizer,
+            compute_metrics=compute_metrics,
+        )
 
-    # 5. Start Training
-    trainer.train()
-
-    # 6. Close the W&B run after training completes
-    wandb.finish()
+        trainer.train()
+        trainer.save_model(f"./models/{run_name}")
+        wandb.finish()
 
     if args.do_predict:
         assert args.model_path is not None, "--model_path must be provided for prediction"
