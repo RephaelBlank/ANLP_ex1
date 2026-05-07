@@ -6,3 +6,4 @@ transformers[torch]
 wandb 
 scikit-learn
 torch
+argparse
