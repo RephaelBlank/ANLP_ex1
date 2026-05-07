@@ -42,6 +42,18 @@ def main():
 
     tokenized_dataset = ds.map(preprocess_function, batched=True)
 
+    train_dataset = tokenized_dataset["train"]
+    if args.max_train_samples != -1:
+        train_dataset = train_dataset.select(range(args.max_train_samples))
+
+    eval_dataset = tokenized_dataset["validation"]
+    if args.max_eval_samples != -1:
+        eval_dataset = eval_dataset.select(range(args.max_eval_samples))
+
+    predict_dataset = tokenized_dataset["test"]
+    if args.max_predict_samples != -1:
+        predict_dataset = predict_dataset.select(range(args.max_predict_samples))
+
     # 1. Initialize Weights & Biases for tracking
     wandb.init(project="paraphrase-detection-bert", name="run-1-lr2e5-batch16")
 
@@ -66,8 +78,8 @@ def main():
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=tokenized_dataset["train"],
-        eval_dataset=tokenized_dataset["validation"],
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         processing_class=tokenizer,
         compute_metrics=compute_metrics,
     )
@@ -77,6 +89,26 @@ def main():
 
     # 6. Close the W&B run after training completes
     wandb.finish()
+
+    if args.do_predict:
+        assert args.model_path is not None, "--model_path must be provided for prediction"
+
+        model = AutoModelForSequenceClassification.from_pretrained(args.model_path)
+        model.eval()
+
+        predictor = Trainer(
+            model=model,
+            processing_class=tokenizer,
+        )
+
+        predictions_output = predictor.predict(predict_dataset)
+        preds = np.argmax(predictions_output.predictions, axis=-1)
+
+        with open("predictions.txt", "w") as f:
+            for pred in preds:
+                f.write(f"{pred}\n")
+
+        print(f"Predictions saved to predictions.txt ({len(preds)} samples)")
 
 
 if __name__ == "__main__":
